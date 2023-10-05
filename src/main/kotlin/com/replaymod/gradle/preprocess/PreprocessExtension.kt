@@ -20,4 +20,5 @@ open class PreprocessExtension(objects: ObjectFactory, val mcVersion: Int) {
     val manageImports = objects.property<Boolean>()
     val tabIndentation = objects.property<Boolean>()
     val enableRemapMessageCollector = objects.property<Boolean>()
+    val remapConcurrency = objects.property<Int>()
 }

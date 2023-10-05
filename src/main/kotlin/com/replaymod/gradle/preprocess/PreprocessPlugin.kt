@@ -101,6 +101,7 @@ class PreprocessPlugin : Plugin<Project> {
                     manageImports.convention(ext.manageImports)
                     tabIndentation.convention(ext.tabIndentation)
                     enableRemapMessageCollector.convention(ext.enableRemapMessageCollector)
+                    remapConcurrency.convention(ext.remapConcurrency)
                 }
                 val sourceJavaTask = project.tasks.findByName("source${name.capitalize()}Java")
                 (sourceJavaTask ?: project.tasks["compile${cName}Java"]).dependsOn(preprocessCode)

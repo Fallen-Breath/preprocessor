@@ -176,6 +176,10 @@ open class PreprocessTask : DefaultTask() {
     @Optional
     val enableRemapMessageCollector = project.objects.property<Boolean>();
 
+    @Input
+    @Optional
+    val remapConcurrency = project.objects.property<Int>();
+
     @Deprecated("Instead add an entry to `entries`.",
         replaceWith = ReplaceWith(expression = "entry(project.file(file), generated, overwrites)"))
     fun source(file: Any) {
@@ -245,6 +249,7 @@ open class PreprocessTask : DefaultTask() {
             })
             val javaTransformer = Transformer(mappings)
             javaTransformer.enableMessageCollector = enableRemapMessageCollector.getOrElse(false)
+            javaTransformer.concurrency = remapConcurrency.getOrElse(1)
             javaTransformer.patternAnnotation = patternAnnotation.orNull
             javaTransformer.manageImports = manageImports.getOrElse(false)
             javaTransformer.jdkHome = jdkHome.orNull?.asFile
