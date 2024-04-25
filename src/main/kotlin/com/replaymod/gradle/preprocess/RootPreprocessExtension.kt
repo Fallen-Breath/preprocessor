@@ -1,28 +1,27 @@
 package com.replaymod.gradle.preprocess
 
+import org.gradle.api.model.ObjectFactory
+import org.gradle.kotlin.dsl.property
 import java.io.File
 
-open class RootPreprocessExtension : ProjectGraphNodeDSL {
-    var rootNode: ProjectGraphNode? = null
-        get() = field ?: linkNodes()?.also { field = it }
-
+open class RootPreprocessExtension(objects: ObjectFactory) : ProjectGraphNodeDSL {
+    private var rootNode: ProjectGraphNode? = null
     private val nodes = mutableSetOf<Node>()
+
+    fun getRootNode(coreProject: String): ProjectGraphNode? {
+        return this.rootNode ?: linkNodes(coreProject)?.also { rootNode = it }
+    }
 
     fun createNode(project: String, mcVersion: Int, mappings: String): Node {
         return Node(project, mcVersion, mappings).also { nodes.add(it) }
     }
 
-    private fun linkNodes(): ProjectGraphNode? {
+    private fun linkNodes(coreProject: String): ProjectGraphNode? {
         var first = nodes.firstOrNull() ?: return null
-
-        val coreProjectFile = File("../mainProject")
-        if (coreProjectFile.isFile) {
-            val coreProject = coreProjectFile.readText().trim()
-            val coreNode = nodes.firstOrNull { n ->
-                n.project == coreProject
-            }
-            first = coreNode ?: first
+        val coreNode = nodes.firstOrNull { n ->
+            n.project == coreProject
         }
+        first = coreNode ?: first
         println("rootNode: " + first.project)
 
         val visited = mutableSetOf<Node>()
@@ -43,6 +42,9 @@ open class RootPreprocessExtension : ProjectGraphNodeDSL {
         check(extraMappings == null) { "Cannot add extra mappings to root node." }
         return ProjectGraphNode(project, mcVersion, mappings).also { rootNode = it }
     }
+
+    val coreProjectFile = objects.property<String>()
+    val coreProjectFileRel = objects.property<String>()
 }
 
 class Node(

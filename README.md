@@ -7,6 +7,16 @@ Modifications in this fork
     tabIndentation = true
   }
   ```
+- Add `coreProjectFile` and `coreProjectFileRel` for more flexible subproject layout
+  ```groovy
+  // in root project
+  preprocess {
+    // base dir: root project directory. Use coreProjectFileRel if not provided
+    coreProjectFile = "versions/mainProject"
+    // base dir: subproject directory. Default: "../mainProject"
+    coreProjectFileRel = "../../mainProject"
+  }
+  ```
 - Use the node of the current core project (defined in file `mainProject`) as the root node of the graph, so less compilation work when switch to and compile a subproject. Noted: this doesn't work for tasks of the root project
 - Add line number hint for "Missing endif" error
 - Improved error message when using an undefined variable in the `//#if` expression

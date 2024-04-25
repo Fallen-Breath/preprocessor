@@ -33,11 +33,13 @@ class PreprocessPlugin : Plugin<Project> {
 
         project.evaluationDependsOn(parent.path)
         val rootExtension = parent.extensions.getByType<RootPreprocessExtension>()
-        val graph = rootExtension.rootNode ?: throw IllegalStateException("Preprocess graph was not configured.")
+        val coreProjectFile = rootExtension.coreProjectFile.orNull?.let { parent.file(it) }
+            ?: project.file(rootExtension.coreProjectFileRel.getOrElse("../mainProject"))
+        val coreProject = coreProjectFile.readText().trim()
+
+        val graph = rootExtension.getRootNode(coreProject) ?: throw IllegalStateException("Preprocess graph was not configured.")
         val projectNode = graph.findNode(project.name) ?: throw IllegalStateException("Preprocess graph does not contain ${project.name}.")
 
-        val coreProjectFile = project.file("../mainProject")
-        val coreProject = coreProjectFile.readText().trim()
         val mcVersion = projectNode.mcVersion
         project.extra["mcVersion"] = mcVersion
         val ext = project.extensions.create("preprocess", PreprocessExtension::class, project.objects, mcVersion)
