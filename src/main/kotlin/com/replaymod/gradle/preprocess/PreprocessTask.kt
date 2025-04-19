@@ -26,14 +26,14 @@ import java.nio.file.Path
 import java.util.regex.Pattern
 
 data class Keywords(
-    val disableRemap: String,
-    val enableRemap: String,
-    val `if`: String,
-    val ifdef: String,
-    val elseif: String,
-    val `else`: String,
-    val endif: String,
-    val eval: String
+        val disableRemap: String,
+        val enableRemap: String,
+        val `if`: String,
+        val ifdef: String,
+        val elseif: String,
+        val `else`: String,
+        val endif: String,
+        val eval: String
 ) : Serializable
 
 @CacheableTask
@@ -41,25 +41,25 @@ open class PreprocessTask : DefaultTask() {
     companion object {
         @JvmStatic
         val DEFAULT_KEYWORDS = Keywords(
-            disableRemap = "//#disable-remap",
-            enableRemap = "//#enable-remap",
-            `if` = "//#if",
-            ifdef = "//#ifdef",
-            elseif = "//#elseif",
-            `else` = "//#else",
-            endif = "//#endif",
-            eval = "//$$"
+                disableRemap = "//#disable-remap",
+                enableRemap = "//#enable-remap",
+                `if` = "//#if",
+                ifdef = "//#ifdef",
+                elseif = "//#elseif",
+                `else` = "//#else",
+                endif = "//#endif",
+                eval = "//$$"
         )
         @JvmStatic
         val CFG_KEYWORDS = Keywords(
-            disableRemap = "##disable-remap",
-            enableRemap = "##enable-remap",
-            `if` = "##if",
-            ifdef = "##ifdef",
-            elseif = "##elseif",
-            `else` = "##else",
-            endif = "##endif",
-            eval = "#$$"
+                disableRemap = "##disable-remap",
+                enableRemap = "##enable-remap",
+                `if` = "##if",
+                ifdef = "##ifdef",
+                elseif = "##elseif",
+                `else` = "##else",
+                endif = "##endif",
+                eval = "#$$"
         )
 
         private val LOGGER = LoggerFactory.getLogger(PreprocessTask::class.java)
@@ -239,10 +239,10 @@ open class PreprocessTask : DefaultTask() {
                     val srcMap = sourceMappings!!.readMappings()
                     val dstMap = destinationMappings!!.readMappings()
                     legacyMap.mergeBoth(
-                        // The inner clsMap is to make the join work, the outer one for custom classes (which are not part of
-                        // dstMap and would otherwise be filtered by the join)
-                        srcMap.mergeBoth(clsMap).join(dstMap.reverse()).mergeBoth(clsMap),
-                        MappingSet.create(LegacyMappingSetModelFactory()))
+                            // The inner clsMap is to make the join work, the outer one for custom classes (which are not part of
+                            // dstMap and would otherwise be filtered by the join)
+                            srcMap.mergeBoth(clsMap).join(dstMap.reverse()).mergeBoth(clsMap),
+                            MappingSet.create(LegacyMappingSetModelFactory()))
                 } else {
                     LegacyMapping.readMappingSet(mapping.toPath(), reverseMapping)
                 }
@@ -268,7 +268,7 @@ open class PreprocessTask : DefaultTask() {
                 if (it.exists()) {
                     it.absolutePath.also(LOGGER::debug)
                 } else {
-                    LOGGER.debug("{} (file does not exist)", it)
+                    LOGGER.debug("$it (file does not exist)")
                     null
                 }
             }.toTypedArray()
@@ -277,7 +277,7 @@ open class PreprocessTask : DefaultTask() {
                 if (it.exists()) {
                     it.absolutePath.also(LOGGER::debug)
                 } else {
-                    LOGGER.debug("{} (file does not exist)", it)
+                    LOGGER.debug("$it (file does not exist)")
                     null
                 }
             }?.toTypedArray()
@@ -291,10 +291,10 @@ open class PreprocessTask : DefaultTask() {
                     val kws = keywords.get().entries.find { (ext, _) -> relPath.endsWith(ext) }
                     if (kws != null) {
                         processedSources[relPath] = CommentPreprocessor(vars.get()).convertSource(
-                            kws.value,
-                            lines,
-                            lines.map { Pair(it, emptyList()) },
-                            relPath
+                                kws.value,
+                                lines,
+                                lines.map { Pair(it, emptyList()) },
+                                relPath
                         ).joinToString("\n")
                     }
                 }
@@ -328,7 +328,7 @@ open class PreprocessTask : DefaultTask() {
                         for ((line, error) in errors) {
                             errorsByLine.getOrPut(line, ::mutableListOf).add(error)
                         }
-                        source.lines().mapIndexed { index: Int, line: String -> Pair(line, errorsByLine[index] ?: emptyList()) }
+                        source.lines().mapIndexed { index: Int, line: String -> Pair(line, errorsByLine[index] ?: emptyList<String>()) }
                     } ?: lines.map { Pair(it, emptyList()) }
                 }
                 commentPreprocessor.convertFile(kws.value, file, outFile, javaTransform)
@@ -518,8 +518,8 @@ open class PreprocessTask : DefaultTask() {
                 val srcDesc = extField.getDesc(extSrcNsId)
                 if (srcDesc == null) {
                     logger.error("Owner ${extCls.getName(extSrcNsId)} of field $srcName does not appear to have any mappings. " +
-                            "As such, you must provide the full signature of this method manually " +
-                            "(if it does not change across versions, providing it for either version is sufficient).")
+                        "As such, you must provide the full signature of this method manually " +
+                        "(if it does not change across versions, providing it for either version is sufficient).")
                     continue
                 }
                 mrgTree.visitField(srcName, srcDesc)
@@ -530,8 +530,8 @@ open class PreprocessTask : DefaultTask() {
                 val srcDesc = extMethod.getDesc(extSrcNsId)
                 if (srcDesc == null) {
                     logger.error("Owner ${extCls.getName(extSrcNsId)} of method $srcName does not appear to have any mappings. " +
-                            "As such, you must provide the full signature of this method manually " +
-                            "(if it does not change across versions, providing it for either version is sufficient).")
+                        "As such, you must provide the full signature of this method manually " +
+                        "(if it does not change across versions, providing it for either version is sufficient).")
                     continue
                 }
                 mrgTree.visitMethod(srcName, srcDesc)
