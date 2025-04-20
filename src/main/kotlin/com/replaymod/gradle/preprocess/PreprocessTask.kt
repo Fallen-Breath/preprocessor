@@ -74,6 +74,9 @@ open class PreprocessTask : DefaultTask() {
     @Internal
     var entries: MutableList<InOut> = mutableListOf()
 
+    @Internal
+    val proj = project
+
     @InputFiles
     @SkipWhenEmpty
     @PathSensitive(PathSensitivity.RELATIVE)
@@ -173,7 +176,7 @@ open class PreprocessTask : DefaultTask() {
             val overwritesBasePath = inOut.overwrites?.toPath()
             inOut.source.flatMap { inBase ->
                 val inBasePath = inBase.toPath()
-                project.fileTree(inBase).map { file ->
+                proj.fileTree(inBase).map { file ->
                     val relPath = inBasePath.relativize(file.toPath())
                     Entry(relPath.toString(), inBasePath, outBasePath, overwritesBasePath)
                 }
@@ -298,7 +301,7 @@ open class PreprocessTask : DefaultTask() {
             }
             val overwritesFiles = entries
                 .mapNotNull { it.overwrites }
-                .flatMap { base -> project.fileTree(base).map { Pair(base.toPath(), it) } }
+                .flatMap { base -> proj.fileTree(base).map { Pair(base.toPath(), it) } }
             overwritesFiles.forEach { (base, file) ->
                 if (file.name.endsWith(".java") || file.name.endsWith(".kt")) {
                     val relPath = base.relativize(file.toPath())
@@ -308,7 +311,7 @@ open class PreprocessTask : DefaultTask() {
             mappedSources = javaTransformer.remap(sources, processedSources)
         }
 
-        project.delete(entries.map { it.generated })
+        proj.delete(entries.map { it.generated })
 
         val commentPreprocessor = CommentPreprocessor(vars.get())
         sourceFiles.forEach { (relPath, inBase, outBase, overwritesPath) ->
@@ -330,7 +333,7 @@ open class PreprocessTask : DefaultTask() {
                 }
                 commentPreprocessor.convertFile(kws.value, file, outFile, javaTransform)
             } else {
-                project.copy {
+                proj.copy {
                     from(file)
                     into(outFile.parentFile)
                 }
