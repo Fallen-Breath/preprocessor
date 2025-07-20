@@ -23,6 +23,13 @@ class PreprocessorTests : FunSpec({
                 "t".evalExpr().shouldBeTrue()
                 "f".evalExpr().shouldBeFalse()
             }
+            test("negation") {
+                "!zero".evalExpr().shouldBeTrue()
+                "!one".evalExpr().shouldBeFalse()
+                "!two".evalExpr().shouldBeFalse()
+                "!t".evalExpr().shouldBeFalse()
+                "!f".evalExpr().shouldBeTrue()
+            }
             test("a == b") {
                 "one == 0".evalExpr().shouldBeFalse()
                 "one == 1".evalExpr().shouldBeTrue()
@@ -85,6 +92,17 @@ class PreprocessorTests : FunSpec({
                 "t && f || t && f".evalExpr().shouldBeFalse()
                 "t || f && t || f".evalExpr().shouldBeTrue()
                 "f || f && t || f".evalExpr().shouldBeFalse()
+            }
+            test("should allow underscore in numbers") {
+                "1_19_02 == 11902".evalExpr().shouldBeTrue()
+            }
+            test("should desugar dot-separated version literals") {
+                "1.19.02 == 11902".evalExpr().shouldBeTrue()
+                "1.19.2 == 11902".evalExpr().shouldBeTrue()
+                "1.19 == 11900".evalExpr().shouldBeTrue()
+                "1.8.9 == 10809".evalExpr().shouldBeTrue()
+                "1.8 == 10800".evalExpr().shouldBeTrue()
+                "1.7.10 == 10710".evalExpr().shouldBeTrue()
             }
             test("unknown variables should throw") {
                 shouldThrow<NoSuchElementException> { "invalid == 0".evalExpr() }

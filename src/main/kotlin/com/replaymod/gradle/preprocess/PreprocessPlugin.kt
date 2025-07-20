@@ -39,10 +39,10 @@ class PreprocessPlugin : Plugin<Project> {
         val coreProjectFile = rootExtension.mainProjectFile.orNull?.let { parent.file(it) }
             ?: project.file(rootExtension.mainProjectFileRel.getOrElse("../mainProject"))
         val coreProject = coreProjectFile.readText().trim()
-
+        if (coreProject !in parent.childProjects) throw IllegalStateException("Configured main project `$coreProject` does not exist.")
         val graph = rootExtension.getRootNode(coreProject) ?: throw IllegalStateException("Preprocess graph was not configured.")
+        if (graph.findNode(coreProject) == null) throw IllegalStateException("Preprocess graph does not contain main project `$coreProject`.")
         val projectNode = graph.findNode(project.name) ?: throw IllegalStateException("Preprocess graph does not contain ${project.name}.")
-
         val mcVersion = projectNode.mcVersion
         project.extra["mcVersion"] = mcVersion
         val ext = project.extensions.create("preprocess", PreprocessExtension::class, project.objects, mcVersion)
