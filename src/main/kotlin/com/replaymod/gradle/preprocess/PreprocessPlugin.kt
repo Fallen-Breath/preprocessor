@@ -9,10 +9,12 @@ import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.io.MappingFormats
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.NamedDomainObjectProvider
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ResolvableConfiguration
 import org.gradle.api.file.Directory
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.SourceDirectorySet
@@ -79,6 +81,16 @@ class PreprocessPlugin : Plugin<Project> {
             val reverseMappings = (inheritedLink != null) != mappingFileInverted
             val inherited = parent.evaluationDependsOn(inheritedNode.project)
 
+            fun incoming(name: String): NamedDomainObjectProvider<ResolvableConfiguration> {
+                val dependencyScope = project.configurations.dependencyScope("preprocess-incoming-$name")
+                project.dependencies {
+                    dependencyScope(project(inherited.path, "preprocess-outgoing-$name"))
+                }
+                return project.configurations.resolvable("${dependencyScope.name}-resolver") {
+                    extendsFrom(dependencyScope.get())
+                }
+            }
+
             project.the<SourceSetContainer>().configureEach {
                 val inheritedSourceSet = inherited.the<SourceSetContainer>()[name]
                 val cName = if (name == "main") "" else name.uppercaseFirstChar()
@@ -91,13 +103,7 @@ class PreprocessPlugin : Plugin<Project> {
                 val generatedResources = preprocessedRoot.dir("resources")
 
                 val compileClasspath = if (name == "main") "compileClasspath" else name + "CompileClasspath"
-                val incomingCompileClasspath = project.configurations.dependencyScope("preprocess-incoming-$compileClasspath")
-                val incomingCompileClasspathResolver = project.configurations.resolvable("${incomingCompileClasspath.name}-resolver") {
-                    extendsFrom(incomingCompileClasspath.get())
-                }
-                project.dependencies {
-                    incomingCompileClasspath(project(inherited.path, "preprocess-outgoing-$compileClasspath"))
-                }
+                val incomingCompileClasspathResolver = incoming(compileClasspath)
 
                 val preprocessCode = project.tasks.register<PreprocessTask>("preprocess${cName}Code") {
                     inherited.tasks.findByPath("preprocess${cName}Code")?.let { dependsOn(it) }
