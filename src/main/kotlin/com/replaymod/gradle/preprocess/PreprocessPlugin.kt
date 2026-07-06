@@ -1,8 +1,6 @@
 package com.replaymod.gradle.preprocess
 
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
-import net.fabricmc.loom.configuration.providers.mappings.LayeredMappingSpecBuilderImpl
-import net.fabricmc.loom.configuration.providers.mappings.LayeredMappingsFactory
 import net.fabricmc.mappingio.MappingReader
 import net.fabricmc.mappingio.tree.MemoryMappingTree
 import org.cadixdev.lorenz.MappingSet
@@ -16,6 +14,7 @@ import org.gradle.api.Task
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.ResolvableConfiguration
 import org.gradle.api.file.Directory
+import org.gradle.api.file.RegularFile
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.provider.Property
@@ -44,6 +43,16 @@ class PreprocessPlugin : Plugin<Project> {
         val rootExtension = parent.extensions.getByType<RootPreprocessExtension>()
         val graph = rootExtension.rootNode ?: throw IllegalStateException("Preprocess graph was not configured.")
         val projectNode = graph.findNode(project.name) ?: throw IllegalStateException("Prepocess graph does not contain ${project.name}.")
+        val adjacentNodes = buildList {
+            graph.findParent(projectNode)?.first?.let { add(it) }
+            projectNode.links.forEach { add(it.first) }
+        }
+
+        if (project.isObfuscated && !projectNode.isObfuscated) {
+            throw IllegalStateException("Project appears to be obfuscated but configured preprocess node has `mappings` set to `null`")
+        } else if (!project.isObfuscated && projectNode.isObfuscated) {
+            throw IllegalStateException("Project appears to not be obfuscated but configured preprocess node has `mappings` set to a non-`null` value")
+        }
 
         val coreProjectFile = project.file("../mainProject")
         val coreProject = coreProjectFile.readText().trim()
@@ -60,6 +69,16 @@ class PreprocessPlugin : Plugin<Project> {
             val compileClasspath = if (name == "main") "compileClasspath" else name + "CompileClasspath"
             project.configurations.consumable("preprocess-outgoing-$compileClasspath") {
                 extendsFrom(project.configurations[compileClasspath])
+            }
+        }
+
+        val projectMojangMappings = project.configurations.dependencyScope("preprocess-mojangMappings")
+        if (projectNode.isObfuscated && adjacentNodes.any { !it.isObfuscated }) {
+            project.dependencies {
+                projectMojangMappings(project.extensions.getByType<LoomGradleExtensionAPI>().officialMojangMappings())
+            }
+            project.configurations.consumable("preprocess-outgoing-mojangMappings") {
+                extendsFrom(projectMojangMappings.get())
             }
         }
 
@@ -173,6 +192,8 @@ class PreprocessPlugin : Plugin<Project> {
                 }
             }
 
+            val inheritedMojangMappings = incoming("mojangMappings")
+
             project.afterEvaluate {
                 if ("genSrgs" in project.tasks.names || "createMcpToSrg" in project.tasks.names) {
                     logger.warn("ForgeGradle compatibility in Preprocessor is deprecated." +
@@ -195,12 +216,12 @@ class PreprocessPlugin : Plugin<Project> {
                     }
                     val mergeSourceMappingsTask = tasks.register("mergeSourceNamedAndMojangMappings", MergeNamedAndMojangMappingsTask::class) {
                         namedMappings.set { inheritedTinyMappings!! }
-                        mojangMappings.set { inherited.mojangMappings!! }
+                        mojangMappings.fileProvider(inheritedMojangMappings.flatMap { it.elements }.map { it.single().asFile })
                         output.set(project.layout.buildDirectory.get().asFile.resolve("mergedSourceNamedAndMojangMappings.tiny"))
                     }
                     val mergeDestinationMappingsTask = tasks.register("mergeDestinationNamedAndMojangMappings", MergeNamedAndMojangMappingsTask::class) {
                         namedMappings.set { projectTinyMappings!! }
-                        mojangMappings.set { project.mojangMappings!! }
+                        mojangMappings.fileProvider(projectMojangMappings.flatMap { it.elements }.map { it.single().asFile })
                         output.set(project.layout.buildDirectory.get().asFile.resolve("mergedDestinationNamedAndMojangMappings.tiny"))
                     }
                     tasks.withType<PreprocessTask>().configureEach {
@@ -522,11 +543,7 @@ private val Project.mappingsProvider: Any?
         }
 
         // Fabric Loom 1.13
-        try {
-            if (extension.javaClass.getMethod("disableObfuscation").invoke(extension) == true) {
-                return null
-            }
-        } catch (_: NoSuchMethodException) {}
+        if (!isObfuscated) return null
 
         listOf(
             "mappingConfiguration", // Fabric Loom 1.1+
@@ -535,6 +552,16 @@ private val Project.mappingsProvider: Any?
             extension.maybeGetGroovyProperty(pro)?.also { return it }
         }
         throw UnsupportedLoom("Failed to find mappings provider")
+    }
+
+private val Project.isObfuscated: Boolean
+    get() {
+        val extension = extensions.findByName("loom") ?: return true
+        return try {
+            extension.javaClass.getMethod("disableObfuscation").invoke(extension) == false
+        } catch (_: NoSuchMethodException) {
+            true
+        }
     }
 
 private val Project.tinyMappings: File?
@@ -559,12 +586,6 @@ private val Project.tinyMappingsWithSrg: File?
             }
         }
         return null
-    }
-
-private val Project.mojangMappings: File?
-    get() {
-        val factory = LayeredMappingsFactory(LayeredMappingSpecBuilderImpl.buildOfficialMojangMappings())
-        return factory.resolve(this).toFile()
     }
 
 private class UnsupportedLoom(msg: String) : GradleException("Loom version not supported by preprocess plugin: $msg")
