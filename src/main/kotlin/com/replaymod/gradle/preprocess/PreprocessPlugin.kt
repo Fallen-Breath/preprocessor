@@ -1,7 +1,11 @@
 package com.replaymod.gradle.preprocess
 
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import net.fabricmc.loom.api.mappings.layered.MappingContext
+import net.fabricmc.loom.api.mappings.layered.MappingLayer
+import net.fabricmc.loom.api.mappings.layered.spec.MappingsSpec
 import net.fabricmc.mappingio.MappingReader
+import net.fabricmc.mappingio.MappingVisitor
 import net.fabricmc.mappingio.tree.MemoryMappingTree
 import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.io.MappingFormats
@@ -75,7 +79,22 @@ class PreprocessPlugin : Plugin<Project> {
         val projectMojangMappings = project.configurations.dependencyScope("preprocess-mojangMappings")
         if (projectNode.isObfuscated && adjacentNodes.any { !it.isObfuscated }) {
             project.dependencies {
-                projectMojangMappings(project.extensions.getByType<LoomGradleExtensionAPI>().officialMojangMappings())
+                projectMojangMappings(project.extensions.getByType<LoomGradleExtensionAPI>().layered {
+                    officialMojangMappings()
+                    // Workaround for a Loom bug where all layered mappings with the same spec (which does not include
+                    // the Minecraft version!) will have the same hash, and so the same maven coordinates / file system
+                    // location, and consequently overwrite each other, making it impossible for us to get hold of the
+                    // correct mappings.
+                    // This bypasses that by modifying the hash of our layered mappings to be different per Minecraft
+                    // version by adding a dummy layer, the hash of which is the Minecraft version.
+                    class NoOpLayer : MappingLayer {
+                        override fun visit(visitor: MappingVisitor) {}
+                    }
+                    addLayer(object : MappingsSpec<NoOpLayer> {
+                        override fun createLayer(ctx: MappingContext): NoOpLayer = NoOpLayer()
+                        override fun hashCode(): Int = projectNode.mcVersion
+                    })
+                })
             }
             project.configurations.consumable("preprocess-outgoing-mojangMappings") {
                 extendsFrom(projectMojangMappings.get())
