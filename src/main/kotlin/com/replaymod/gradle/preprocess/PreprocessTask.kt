@@ -4,8 +4,6 @@ import com.replaymod.gradle.remap.Transformer
 import com.replaymod.gradle.remap.legacy.LegacyMapping
 import com.replaymod.gradle.remap.legacy.LegacyMappingSetModelFactory
 import net.fabricmc.mappingio.MappedElementKind
-import net.fabricmc.mappingio.MappingReader
-import net.fabricmc.mappingio.MappingVisitor
 import net.fabricmc.mappingio.tree.MappingTree
 import net.fabricmc.mappingio.tree.MemoryMappingTree
 import org.cadixdev.lorenz.MappingSet
@@ -30,14 +28,11 @@ import org.gradle.workers.WorkerExecutor
 import java.io.File
 import java.io.Serializable
 import java.lang.ref.SoftReference
-import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.function.Consumer
 import java.util.regex.Pattern
 import javax.inject.Inject
-import kotlin.io.path.bufferedReader
-import kotlin.io.path.extension
 
 data class Keywords(
         val disableRemap: String,
@@ -505,18 +500,6 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
         }
     }
 
-    private fun readMappings(path: Path, visitor: MappingVisitor) {
-        if (path.extension == "jar") {
-            FileSystems.newFileSystem(path).use { fileSystem ->
-                fileSystem.getPath("mappings", "mappings.tiny").bufferedReader().use { reader ->
-                    return MappingReader.read(reader, visitor)
-                }
-            }
-        } else {
-            return MappingReader.read(path, visitor)
-        }
-    }
-
     /**
      * Tries to infer shared classes based on shared members.
      *
@@ -690,7 +673,7 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                 val srcDesc = extField.getDesc(extSrcNsId)
                 if (srcDesc == null) {
                     LOGGER.error("Owner ${extCls.getName(extSrcNsId)} of field $srcName does not appear to have any mappings. " +
-                        "As such, you must provide the full signature of this method manually " +
+                        "As such, you must provide the full signature of this field manually " +
                         "(if it does not change across versions, providing it for either version is sufficient).")
                     continue
                 }
@@ -721,7 +704,21 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                     tmpTree.getClass(dstName)!!
                 }
             } else {
-                dstTree.getClass(srcCls.getName(srcSharedNsId), dstSharedNsId) ?: continue
+                val sharedName = srcCls.getName(srcSharedNsId)
+                dstTree.getClass(sharedName, dstSharedNsId)
+                    // Usually the shared name is something human-unfriendly like `class_1234`, and therefore we'd
+                    // prefer keeping the human readable source name when we cannot find the destination name.
+                    // However, in the specific case of mapping between obfuscated and unobfuscated versions, the
+                    // shared name will actually be the unobfuscated name, and that'll usually be closer than the
+                    // original (often yarn) name. So in such a scenario, we'll just use the shared name as the
+                    // destination name if we can't find the real destination class (e.g. because it was renamed).
+                    ?: if (sharedNamespace == "mojang") {
+                        tmpTree.visitClass(sharedName)
+                        tmpTree.visitDstName(MappedElementKind.CLASS, dstNamedNsId, sharedName)
+                        tmpTree.getClass(sharedName)!!
+                    } else {
+                        continue
+                    }
             }
             mrgTree.visitClass(srcCls.getName(srcNamedNsId))
             mrgTree.visitDstName(MappedElementKind.CLASS, 0, dstCls.getName(dstNamedNsId))

@@ -22,7 +22,7 @@ open class RootPreprocessExtension @Inject constructor(
         return nodes.toList()
     }
 
-    fun createNode(project: String, mcVersion: Int, mappings: String): Node {
+    fun createNode(project: String, mcVersion: Int, mappings: String?): Node {
         return Node(project, mcVersion, mappings).also { nodes.add(it) }
     }
 
@@ -47,7 +47,7 @@ open class RootPreprocessExtension @Inject constructor(
         return first.breadthFirstSearch()
     }
 
-    override fun addNode(project: String, mcVersion: Int, mappings: String, extraMappings: File?, invertMappings: Boolean): ProjectGraphNode {
+    override fun addNode(project: String, mcVersion: Int, mappings: String?, extraMappings: File?, invertMappings: Boolean): ProjectGraphNode {
         check(rootNode == null) { "Only one root node may be set." }
         check(extraMappings == null) { "Cannot add extra mappings to root node." }
         return ProjectGraphNode(project, mcVersion, mappings).also { rootNode = it }
@@ -60,7 +60,7 @@ open class RootPreprocessExtension @Inject constructor(
 class Node(
     val project: String,
     val mcVersion: Int,
-    val mappings: String,
+    val mappings: String?,
 ) {
     internal val links = mutableMapOf<Node, Pair<File?, Boolean>>()
 
@@ -71,21 +71,24 @@ class Node(
 }
 
 interface ProjectGraphNodeDSL {
-    operator fun String.invoke(mcVersion: Int, mappings: String, extraMappings: File? = null, configure: ProjectGraphNodeDSL.() -> Unit = {}) {
+    operator fun String.invoke(mcVersion: Int, mappings: String?, extraMappings: File? = null, configure: ProjectGraphNodeDSL.() -> Unit = {}) {
         addNode(this, mcVersion, mappings, extraMappings).configure()
     }
 
-    fun addNode(project: String, mcVersion: Int, mappings: String, extraMappings: File? = null, invertMappings: Boolean = false): ProjectGraphNodeDSL
+    fun addNode(project: String, mcVersion: Int, mappings: String?, extraMappings: File? = null, invertMappings: Boolean = false): ProjectGraphNodeDSL
 }
 
 open class ProjectGraphNode(
         val project: String,
         val mcVersion: Int,
-        val mappings: String,
+        val mappings: String?,
         val links: MutableList<Pair<ProjectGraphNode, Pair<File?, Boolean>>> = mutableListOf()
 ) : ProjectGraphNodeDSL {
-    override fun addNode(project: String, mcVersion: Int, mappings: String, extraMappings: File?, invertMappings: Boolean): ProjectGraphNodeDSL =
+    override fun addNode(project: String, mcVersion: Int, mappings: String?, extraMappings: File?, invertMappings: Boolean): ProjectGraphNodeDSL =
             ProjectGraphNode(project, mcVersion, mappings).also { links.add(Pair(it, Pair(extraMappings, invertMappings))) }
+
+    val isObfuscated: Boolean
+        get() = mappings != null
 
     fun findNode(project: String): ProjectGraphNode? = if (project == this.project) {
         this
