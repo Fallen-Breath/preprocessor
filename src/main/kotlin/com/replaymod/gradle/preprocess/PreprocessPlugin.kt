@@ -399,6 +399,8 @@ private fun readMappings(format: String, path: Path): MappingSet {
 
 private fun Project.isUnobfuscated(): Boolean {
     return plugins.hasPlugin("net.fabricmc.fabric-loom")
+           || plugins.hasPlugin("dev.architectury.loom-no-remap")
+           || plugins.hasPlugin("gg.essential.loom-no-remap")
 }
 
 private val Project.intermediaryMappings: Mappings
