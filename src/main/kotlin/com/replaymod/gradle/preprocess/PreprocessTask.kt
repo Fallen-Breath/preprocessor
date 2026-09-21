@@ -439,30 +439,35 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                 }
             }?.toTypedArray()
             val sources = mutableMapOf<String, String>()
+            val processedSourcesRequired = patternAnnotation.isPresent || manageImports.getOrElse(false)  // fallen's fork: optimize skip unused processed sources
             val processedSources = mutableMapOf<String, String>()
             sourceFiles.forEach { (relPath, inBase, _, _) ->
                 if (relPath.endsWith(".java") || relPath.endsWith(".kt")) {
                     val text = String(Files.readAllBytes(inBase.resolve(relPath)))
                     sources[relPath] = text
-                    val lines = text.lines()
-                    val kws = keywords.get().entries.find { (ext, _) -> relPath.endsWith(ext) }
-                    if (kws != null) {
-                        processedSources[relPath] = CommentPreprocessor(vars.get()).convertSource(
-                                kws.value,
-                                lines,
-                                lines.map { Pair(it, emptyList()) },
-                                relPath
-                        ).joinToString("\n")
+                    if (processedSourcesRequired) {  // fallen's fork: optimize skip unused processed sources - wrap with if
+                        val lines = text.lines()
+                        val kws = keywords.get().entries.find { (ext, _) -> relPath.endsWith(ext) }
+                        if (kws != null) {
+                            processedSources[relPath] = CommentPreprocessor(vars.get()).convertSource(
+                                    kws.value,
+                                    lines,
+                                    lines.map { Pair(it, emptyList()) },
+                                    relPath
+                            ).joinToString("\n")
+                        }
                     }
                 }
             }
-            val overwritesFiles = entries
-                .mapNotNull { it.overwrites }
-                .flatMap { base -> base.walk().filter { it.isFile }.map { Pair(base.toPath(), it) } }
-            overwritesFiles.forEach { (base, file) ->
-                if (file.name.endsWith(".java") || file.name.endsWith(".kt")) {
-                    val relPath = base.relativize(file.toPath())
-                    processedSources[relPath.toString()] = file.readText()
+            if (processedSourcesRequired) {  // fallen's fork: optimize skip unused processed sources - wrap with if
+                val overwritesFiles = entries
+                    .mapNotNull { it.overwrites }
+                    .flatMap { base -> base.walk().filter { it.isFile }.map { Pair(base.toPath(), it) } }
+                overwritesFiles.forEach { (base, file) ->
+                    if (file.name.endsWith(".java") || file.name.endsWith(".kt")) {
+                        val relPath = base.relativize(file.toPath())
+                        processedSources[relPath.toString()] = file.readText()
+                    }
                 }
             }
             mappedSources = javaTransformer.remap(sources, processedSources)
