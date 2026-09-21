@@ -30,6 +30,8 @@ import java.io.Serializable
 import java.lang.ref.SoftReference
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.util.Comparator
 import java.util.function.Consumer
 import java.util.regex.Pattern
 import javax.inject.Inject
@@ -306,6 +308,14 @@ internal abstract class PreprocessAction : WorkAction<PreprocessParameters> {
     }
 }
 
+// fallen's fork: optimize incremental generated output - make it global
+private data class SourceEntry(
+    val relPath: String,
+    val inBase: Path,
+    val outBase: Path,
+    val overwritesBase: Path?,
+)
+
 private class PreprocessActionImpl : Consumer<PreprocessParameters> {
     override fun accept(params: PreprocessParameters) {
         val logger = LOGGER
@@ -325,15 +335,14 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
         val patternAnnotation = params.patternAnnotation
         val manageImports = params.manageImports
 
-        data class Entry(val relPath: String, val inBase: Path, val outBase: Path, val overwritesBase: Path?)
-        val sourceFiles: List<Entry> = entries.flatMap { inOut ->
+        val sourceFiles: List<SourceEntry> = entries.flatMap { inOut ->
             val outBasePath = inOut.generated.toPath()
             val overwritesBasePath = inOut.overwrites?.toPath()
             inOut.source.flatMap { inBase ->
                 val inBasePath = inBase.toPath()
                 inBase.walk().filter { it.isFile }.map { file ->
                     val relPath = inBasePath.relativize(file.toPath())
-                    Entry(relPath.toString(), inBasePath, outBasePath, overwritesBasePath)
+                    SourceEntry(relPath.toString(), inBasePath, outBasePath, overwritesBasePath)
                 }
             }
         }
@@ -473,7 +482,9 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
             mappedSources = javaTransformer.remap(sources, processedSources)
         }
 
-        entries.forEach { it.generated.deleteRecursively() }
+        // fallen's fork: optimize incremental generated output
+        // entries.forEach { it.generated.deleteRecursively() }
+        cleanGeneratedOutputs(entries, sourceFiles)
 
         val commentPreprocessor = CommentPreprocessor(vars.get())
         sourceFiles.forEach { (relPath, inBase, outBase, overwritesPath) ->
@@ -493,10 +504,14 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                         source.lines().mapIndexed { index: Int, line: String -> Pair(line, errorsByLine[index] ?: emptyList<String>()) }
                     } ?: lines.map { Pair(it, emptyList()) }
                 }
-                commentPreprocessor.convertFile(kws.value, file, outFile, javaTransform)
+                // fallen's fork: optimize incremental generated output
+                // commentPreprocessor.convertFile(kws.value, file, outFile, javaTransform)
+                writeBytesIfChanged(outFile, commentPreprocessor.convertFileToText(kws.value, file, javaTransform).toByteArray(Charsets.UTF_8))
             } else {
-                outFile.parentFile.mkdirs()
-                file.copyTo(outFile)
+                // fallen's fork: optimize incremental generated output
+                // outFile.parentFile.mkdirs()
+                // file.copyTo(outFile)
+                writeBytesIfChanged(outFile, file.readBytes())
             }
         }
 
@@ -504,6 +519,44 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
             throw GradleException("Failed to remap sources. See errors above for details.")
         }
     }
+
+// fallen's fork: optimize incremental generated output
+private fun cleanGeneratedOutputs(entries: List<PreprocessTask.InOut>, sourceFiles: List<SourceEntry>) {
+    val expectedOutputs = entries
+        .associate { it.generated.toPath().toAbsolutePath().normalize() to mutableSetOf<Path>() }
+        .toMutableMap()
+    sourceFiles.forEach { (relPath, _, outBase, overwritesPath) ->
+        if (overwritesPath == null || !Files.exists(overwritesPath.resolve(relPath))) {
+            expectedOutputs.getOrPut(outBase.toAbsolutePath().normalize(), ::mutableSetOf)
+                .add(outBase.resolve(relPath).toAbsolutePath().normalize())
+        }
+    }
+    expectedOutputs.forEach { (generatedBase, expectedFiles) ->
+        val generated = generatedBase.toFile()
+        if (expectedFiles.isEmpty()) {
+            generated.deleteRecursively()
+        } else if (generated.isFile) {
+            generated.delete()
+        } else if (generated.exists()) {
+            Files.walk(generatedBase).use { files ->
+                files.filter { Files.isRegularFile(it) && it !in expectedFiles }
+                    .forEach { Files.deleteIfExists(it) }
+            }
+            Files.walk(generatedBase)
+                .sorted(Comparator.reverseOrder())
+                .use { paths ->
+                    paths.filter { it != generatedBase && Files.isDirectory(it) }
+                        .forEach { directory ->
+                            Files.list(directory).use { children ->
+                                if (!children.findAny().isPresent) {
+                                    Files.deleteIfExists(directory)
+                                }
+                            }
+                        }
+                }
+        }
+    }
+}
 
     /**
      * Tries to infer shared classes based on shared members.
@@ -969,6 +1022,13 @@ class CommentPreprocessor(private val vars: Map<String, Int>) {
     }
 
     fun convertFile(kws: Keywords, inFile: File, outFile: File, remap: ((List<String>) -> List<Pair<String, List<String>>>)? = null) {
+        val text = convertFileToText(kws, inFile, remap)
+        outFile.parentFile.mkdirs()
+        outFile.writeText(text)
+    }
+
+    // fallen's fork: optimize incremental generated output - add convertFileToText() that returns String
+    fun convertFileToText(kws: Keywords, inFile: File, remap: ((List<String>) -> List<Pair<String, List<String>>>)? = null): String {
         val string = inFile.readText()
         var lines = string.lines()
         val remapped = remap?.invoke(lines) ?: lines.map { Pair(it, emptyList()) }
@@ -980,8 +1040,7 @@ class CommentPreprocessor(private val vars: Map<String, Int>) {
             }
             throw RuntimeException("Failed to convert file $inFile", e)
         }
-        outFile.parentFile.mkdirs()
-        outFile.writeText(lines.joinToString("\n"))
+        return lines.joinToString("\n")
     }
 
     data class IfStackEntry(
@@ -995,6 +1054,25 @@ class CommentPreprocessor(private val vars: Map<String, Int>) {
 
     class ParserException(str: String) : RuntimeException(str)
 }
+
+// fallen's fork: optimize incremental generated output - begin
+private fun writeBytesIfChanged(file: File, bytes: ByteArray) {
+    if (file.isFile && file.readBytes().contentEquals(bytes)) {
+        return
+    }
+    if (!file.isFile && file.exists()) {
+        file.deleteRecursively()
+    }
+    file.parentFile.mkdirs()
+    Files.write(
+        file.toPath(),
+        bytes,
+        StandardOpenOption.CREATE,
+        StandardOpenOption.TRUNCATE_EXISTING,
+        StandardOpenOption.WRITE,
+    )
+}
+// fallen's fork: optimize incremental generated output - end
 
 private fun <E> MutableList<E>.push(e: E) = add(e)
 private fun <E> MutableList<E>.pop() = removeLast()

@@ -20,6 +20,7 @@ Modifications in this fork
   - Disable message logging of remap's kotlin compiler message collector by default. You can re-enable that by setting `preprocess { enableRemapMessageCollector = true }`
 - Optimizations:
   - When neither `@Pattern` nor `manageImports` is used, skip creating the unused `processedSources` map.
+  - Update generated files incrementally, removing stale outputs and skipping writes for unchanged content.
 
 ### The Preprocessor
 To support multiple Minecraft versions with the ReplayMod, a [JCP](https://github.com/raydac/java-comment-preprocessor)-inspired preprocessor is used:
