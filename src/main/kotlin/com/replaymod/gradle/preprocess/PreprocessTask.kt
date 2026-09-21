@@ -1,5 +1,6 @@
 package com.replaymod.gradle.preprocess
 
+import com.replaymod.gradle.remap.PhysicalSourceFile
 import com.replaymod.gradle.remap.Transformer
 import com.replaymod.gradle.remap.legacy.LegacyMapping
 import com.replaymod.gradle.remap.legacy.LegacyMappingSetModelFactory
@@ -32,6 +33,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Comparator
+import java.util.Locale // fallen's fork: optimize use physical source roots for PSI
 import java.util.function.Consumer
 import java.util.regex.Pattern
 import javax.inject.Inject
@@ -448,11 +450,35 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                 }
             }?.toTypedArray()
             val sources = mutableMapOf<String, String>()
+
+            // fallen's fork: optimize use physical source roots for PSI - begin
+            val physicalSourceFiles = mutableMapOf<String, PhysicalSourceFile>()
+            val sourcePathKeys = mutableSetOf<String>()
+            var duplicateSourcePaths = false
+            var sourceEncodingSafe = true
+            val hasNonCodeSourceFiles = sourceFiles.any { (relPath, _, _, _) ->
+                !relPath.endsWith(".java") && !relPath.endsWith(".kt")
+            }
+            // fallen's fork: optimize use physical source roots for PSI - end
+
             val processedSourcesRequired = patternAnnotation.isPresent || manageImports.getOrElse(false)  // fallen's fork: optimize skip unused processed sources
             val processedSources = mutableMapOf<String, String>()
             sourceFiles.forEach { (relPath, inBase, _, _) ->
                 if (relPath.endsWith(".java") || relPath.endsWith(".kt")) {
-                    val text = String(Files.readAllBytes(inBase.resolve(relPath)))
+
+                    // fallen's fork: optimize use physical source roots for PSI - begin
+                    val bytes = Files.readAllBytes(inBase.resolve(relPath))
+                    val text = String(bytes)
+                    if (!bytes.contentEquals(text.toByteArray(Charsets.UTF_8))) {
+                        sourceEncodingSafe = false
+                    }
+                    val sourcePathKey = if (File.separatorChar == '\\') relPath.lowercase(Locale.ROOT) else relPath
+                    if (!sourcePathKeys.add(sourcePathKey)) {
+                        duplicateSourcePaths = true
+                    }
+                    physicalSourceFiles[relPath] = PhysicalSourceFile(inBase.resolve(relPath).toFile(), inBase.toFile(), text)
+                    // fallen's fork: optimize use physical source roots for PSI - end
+
                     sources[relPath] = text
                     if (processedSourcesRequired) {  // fallen's fork: optimize skip unused processed sources - wrap with if
                         val lines = text.lines()
@@ -479,7 +505,15 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
                     }
                 }
             }
-            mappedSources = javaTransformer.remap(sources, processedSources)
+
+            // fallen's fork: optimize use physical source roots for PSI - begin
+            val usePhysicalSourceFiles = !duplicateSourcePaths && !hasNonCodeSourceFiles && sourceEncodingSafe && physicalSourceFiles.size == sources.size
+            mappedSources = if (usePhysicalSourceFiles) {
+                javaTransformer.remapFromFiles(physicalSourceFiles, processedSources)
+            } else {
+                javaTransformer.remap(sources, processedSources)
+            }
+            // fallen's fork: optimize use physical source roots for PSI - end
         }
 
         // fallen's fork: optimize incremental generated output

@@ -22,6 +22,7 @@ Modifications in this fork
 - Optimizations:
   - When neither `@Pattern` nor `manageImports` is used, skip creating the unused `processedSources` map.
   - Update generated files incrementally, removing stale outputs and skipping writes for unchanged content.
+  - Use physical source roots for PSI when source paths, file types, and encodings are safe; otherwise fall back to staged sources.
 
 ### The Preprocessor
 To support multiple Minecraft versions with the ReplayMod, a [JCP](https://github.com/raydac/java-comment-preprocessor)-inspired preprocessor is used:
