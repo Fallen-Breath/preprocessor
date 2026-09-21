@@ -18,6 +18,7 @@ Modifications in this fork
 - Use custom [remap](https://github.com/ReplayMod/remap) fork: https://github.com/Fallen-Breath/remap
   - Less useless warning messages
   - Disable message logging of remap's kotlin compiler message collector by default. You can re-enable that by setting `preprocess { enableRemapMessageCollector = true }`
+  - Optimize skip unused processed temp root
 - Optimizations:
   - When neither `@Pattern` nor `manageImports` is used, skip creating the unused `processedSources` map.
   - Update generated files incrementally, removing stale outputs and skipping writes for unchanged content.
