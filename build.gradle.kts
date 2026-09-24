@@ -59,7 +59,7 @@ repositories {
 dependencies {
     implementation(gradleApi())
     implementation(localGroovy())
-    implementation("com.github.Fallen-Breath:remap:cc4c0ac72d") {
+    implementation("com.github.Fallen-Breath:remap:20f4f7db40") {
         exclude("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
     }
     implementation("net.fabricmc:mapping-io:0.6.1")
