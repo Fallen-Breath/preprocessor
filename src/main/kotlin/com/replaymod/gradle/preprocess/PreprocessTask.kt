@@ -508,6 +508,13 @@ private class PreprocessActionImpl : Consumer<PreprocessParameters> {
 
             // fallen's fork: optimize use physical source roots for PSI - begin
             val usePhysicalSourceFiles = !duplicateSourcePaths && !hasNonCodeSourceFiles && sourceEncodingSafe && physicalSourceFiles.size == sources.size
+            // fallen's fork: debug remap profiling
+            LOGGER.lifecycle(
+                "Preprocess remap debug: mode=${if (usePhysicalSourceFiles) "file-backed" else "staged"}, " +
+                    "sources=${sources.size}, processedSourcesRequired=$processedSourcesRequired, " +
+                    "processedSources=${processedSources.size}, duplicateSourcePaths=$duplicateSourcePaths, " +
+                    "hasNonCodeSourceFiles=$hasNonCodeSourceFiles, sourceEncodingSafe=$sourceEncodingSafe"
+            )
             mappedSources = if (usePhysicalSourceFiles) {
                 javaTransformer.remapFromFiles(physicalSourceFiles, processedSources)
             } else {
