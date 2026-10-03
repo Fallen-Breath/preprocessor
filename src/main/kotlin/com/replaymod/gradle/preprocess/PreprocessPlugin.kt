@@ -78,6 +78,9 @@ class PreprocessPlugin : Plugin<Project> {
         }
 
         val projectMojangMappings = project.configurations.dependencyScope("preprocess-mojangMappings")
+        val projectMojangMappingsResolver = project.configurations.resolvable("${projectMojangMappings.name}-resolver") {
+            extendsFrom(projectMojangMappings.get())
+        }
         if (projectNode.isObfuscated && adjacentNodes.any { !it.isObfuscated }) {
             project.dependencies {
                 projectMojangMappings(project.extensions.getByType<LoomGradleExtensionAPI>().layered {
@@ -244,7 +247,7 @@ class PreprocessPlugin : Plugin<Project> {
                     }
                     val mergeDestinationMappingsTask = tasks.register("mergeDestinationNamedAndMojangMappings", MergeNamedAndMojangMappingsTask::class) {
                         namedMappings.set { projectTinyMappings!! }
-                        mojangMappings.fileProvider(projectMojangMappings.flatMap { it.elements }.map { it.single().asFile })
+                        mojangMappings.fileProvider(projectMojangMappingsResolver.flatMap { it.elements }.map { it.single().asFile })
                         output.set(project.layout.buildDirectory.get().asFile.resolve("mergedDestinationNamedAndMojangMappings.tiny"))
                     }
                     tasks.withType<PreprocessTask>().configureEach {
